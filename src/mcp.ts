@@ -10,6 +10,7 @@
  *   claude mcp add worldmonitor -- npx worldmonitor-mcp
  */
 
+import 'dotenv/config';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';

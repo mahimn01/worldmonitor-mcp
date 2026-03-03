@@ -1,6 +1,6 @@
 /**
  * Economic calendar direct handlers — upcoming economic events, earnings, IPOs.
- * Uses Finnhub (free tier) with FRED release calendar as fallback.
+ * Uses Finnhub (free tier for earnings/IPO) and FRED for economic releases.
  */
 
 import { DirectHandler } from '../types.js';
@@ -22,27 +22,32 @@ const getEconomicCalendar: DirectHandler = async (params) => {
   const days = (params.days as number) || 7;
   const from = dateStr(0);
   const to = dateStr(days);
-  const key = finnhubKey();
 
-  if (key) {
-    const url = new URL(`${FINNHUB_BASE}/calendar/economic`);
-    url.searchParams.set('from', from);
-    url.searchParams.set('to', to);
-    url.searchParams.set('token', key);
-    return fetchJson(url.toString());
-  }
-
-  // Fallback: FRED release dates (requires FRED_API_KEY)
+  // Primary: FRED release dates (works with free FRED API key)
   const fredKey = process.env.FRED_API_KEY;
-  if (!fredKey) {
-    throw new Error(
-      'Economic calendar requires FINNHUB_API_KEY or FRED_API_KEY environment variable. ' +
-        'Get a free Finnhub key at https://finnhub.io/register or ' +
-        'a free FRED key at https://fred.stlouisfed.org/docs/api/api_key.html',
+  if (fredKey) {
+    return fetchJson(
+      `https://api.stlouisfed.org/fred/releases/dates?api_key=${fredKey}&file_type=json&include_release_dates_with_no_data=true&realtime_start=${from}&realtime_end=${to}`,
     );
   }
-  return fetchJson(
-    `https://api.stlouisfed.org/fred/releases/dates?api_key=${fredKey}&file_type=json&include_release_dates_with_no_data=true&realtime_start=${from}&realtime_end=${to}`,
+
+  // Fallback: Try Finnhub (requires premium)
+  const key = finnhubKey();
+  if (key) {
+    try {
+      const url = new URL(`${FINNHUB_BASE}/calendar/economic`);
+      url.searchParams.set('from', from);
+      url.searchParams.set('to', to);
+      url.searchParams.set('token', key);
+      return await fetchJson(url.toString());
+    } catch {
+      // Premium endpoint, may fail on free tier
+    }
+  }
+
+  throw new Error(
+    'Economic calendar requires FRED_API_KEY (free) or FINNHUB_API_KEY (premium). ' +
+      'Get a free FRED key at https://fred.stlouisfed.org/docs/api/api_key.html',
   );
 };
 
@@ -52,11 +57,17 @@ const getEarningsCalendar: DirectHandler = async (params) => {
   const to = dateStr(days);
   const key = finnhubKey();
 
+  if (!key) {
+    throw new Error(
+      'Earnings calendar requires FINNHUB_API_KEY. Get a free key at https://finnhub.io/register',
+    );
+  }
+
   const url = new URL(`${FINNHUB_BASE}/calendar/earnings`);
   url.searchParams.set('from', from);
   url.searchParams.set('to', to);
   if (params.symbol) url.searchParams.set('symbol', params.symbol as string);
-  if (key) url.searchParams.set('token', key);
+  url.searchParams.set('token', key);
   return fetchJson(url.toString());
 };
 
@@ -66,10 +77,16 @@ const getIpoCalendar: DirectHandler = async (params) => {
   const to = dateStr(days);
   const key = finnhubKey();
 
+  if (!key) {
+    throw new Error(
+      'IPO calendar requires FINNHUB_API_KEY. Get a free key at https://finnhub.io/register',
+    );
+  }
+
   const url = new URL(`${FINNHUB_BASE}/calendar/ipo`);
   url.searchParams.set('from', from);
   url.searchParams.set('to', to);
-  if (key) url.searchParams.set('token', key);
+  url.searchParams.set('token', key);
   return fetchJson(url.toString());
 };
 

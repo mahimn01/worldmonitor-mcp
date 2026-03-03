@@ -32,7 +32,8 @@ const getWeatherForecast: DirectHandler = async (params) => {
 
 const getCropReport: DirectHandler = async (params) => {
   const commodity = (params.commodity as string).toUpperCase();
-  const year = (params.year as number) || new Date().getFullYear();
+  // Default to previous year since crop production data is reported retroactively
+  const year = (params.year as number) || new Date().getFullYear() - 1;
   const apiKey = process.env.USDA_API_KEY;
 
   if (!apiKey) {
@@ -48,8 +49,12 @@ const getCropReport: DirectHandler = async (params) => {
   url.searchParams.set('commodity_desc', commodity);
   url.searchParams.set('year', String(year));
   url.searchParams.set('statisticcat_desc', 'PRODUCTION');
-  url.searchParams.set('agg_level_desc', 'STATE');
-  if (params.state) url.searchParams.set('state_alpha', params.state as string);
+  if (params.state) {
+    url.searchParams.set('agg_level_desc', 'STATE');
+    url.searchParams.set('state_alpha', (params.state as string).toUpperCase());
+  } else {
+    url.searchParams.set('agg_level_desc', 'NATIONAL');
+  }
   return fetchJson(url.toString());
 };
 

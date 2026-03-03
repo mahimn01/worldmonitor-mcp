@@ -10,6 +10,7 @@
  *   worldmonitor --mcp   (starts MCP server over stdio)
  */
 
+import 'dotenv/config';
 import { Command } from 'commander';
 import { loadConfig } from './config.js';
 import { WorldMonitorClient } from './client.js';
