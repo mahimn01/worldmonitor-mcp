@@ -17,13 +17,17 @@ export interface FetchOptions {
   tlsPermissive?: boolean;
 }
 
+const MAX_REDIRECTS = 5;
+
 /**
  * Low-level HTTPS request using node:https that allows skipping
  * certificate validation (for .gov APIs with self-signed certs).
+ * Follows redirects (301, 302, 307, 308) up to MAX_REDIRECTS.
  */
 function httpsRequest(
   url: string,
   opts: FetchOptions,
+  redirectCount = 0,
 ): Promise<{ status: number; statusText: string; body: string }> {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
@@ -36,7 +40,8 @@ function httpsRequest(
       path: parsed.pathname + parsed.search,
       method: opts.method ?? 'GET',
       headers: {
-        Accept: 'application/json',
+        Accept: '*/*',
+        'User-Agent': 'worldmonitor-mcp/1.0',
         ...opts.headers,
         ...(opts.body ? { 'Content-Length': Buffer.byteLength(opts.body).toString() } : {}),
       },
@@ -45,11 +50,28 @@ function httpsRequest(
     };
 
     const req = mod.request(reqOpts, (res) => {
+      const status = res.statusCode ?? 0;
+
+      // Follow redirects
+      if ([301, 302, 307, 308].includes(status) && res.headers.location) {
+        if (redirectCount >= MAX_REDIRECTS) {
+          reject(new Error(`Too many redirects (${MAX_REDIRECTS})`));
+          return;
+        }
+        const location = res.headers.location.startsWith('http')
+          ? res.headers.location
+          : new URL(res.headers.location, url).toString();
+        // Consume response body before following redirect
+        res.resume();
+        resolve(httpsRequest(location, opts, redirectCount + 1));
+        return;
+      }
+
       let data = '';
       res.on('data', (chunk: Buffer | string) => { data += chunk; });
       res.on('end', () => {
         resolve({
-          status: res.statusCode ?? 0,
+          status,
           statusText: res.statusMessage ?? '',
           body: data,
         });

@@ -4,7 +4,7 @@
  */
 
 import { DirectHandler } from '../types.js';
-import { fetchJson } from './_http.js';
+import { fetchJson, fetchText } from './_http.js';
 
 const searchFederalRegister: DirectHandler = async (params) => {
   const url = new URL(
@@ -83,8 +83,9 @@ const getGovernmentContracts: DirectHandler = async (params) => {
 
 const getSanctionsSearch: DirectHandler = async (params) => {
   const name = params.name as string;
+  const nameLower = name.toLowerCase();
 
-  // Use OpenSanctions API if key is available
+  // Use OpenSanctions API if key is available (best structured data)
   const osKey = process.env.OPENSANCTIONS_API_KEY;
   if (osKey) {
     const url = new URL('https://api.opensanctions.org/search/default');
@@ -96,36 +97,74 @@ const getSanctionsSearch: DirectHandler = async (params) => {
     });
   }
 
-  // Fallback: OFAC SDN search via sanctions explorer (free, no key)
-  const url = new URL(
-    'https://sanctionssearch.ofac.treas.gov/Details.aspx/SearchList',
-  );
+  // Primary free source: OFAC SDN CSV (public download, no key needed)
+  // Downloads the full SDN list and searches locally
   try {
-    const result = await fetchJson(url.toString(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        NameValue: name,
-        CityValue: '',
-        StateValue: '',
-        CountryValue: '',
-        AddressValue: '',
-        SDNType: (params.type as string) || '',
-        ListType: '',
-        ProgramValue: '',
-        PageNumber: 1,
-      }),
-      tlsPermissive: true,
-    });
-    return result;
-  } catch {
-    // OFAC search API is unreliable; return helpful message
+    const csv = await fetchText(
+      'https://www.treasury.gov/ofac/downloads/sdn.csv',
+      { tlsPermissive: true, timeout: 30_000 },
+    );
+
+    const lines = csv.split('\n');
+    const matches: {
+      sdn_id: string;
+      name: string;
+      type: string;
+      country: string;
+      program: string;
+      remarks: string;
+    }[] = [];
+
+    for (const line of lines) {
+      if (!line.toLowerCase().includes(nameLower)) continue;
+
+      // SDN CSV format: id,"name","type","country","program",...,"remarks"
+      // Parse CSV properly handling quoted fields with commas inside
+      const fields: string[] = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          inQuotes = !inQuotes;
+        } else if (ch === ',' && !inQuotes) {
+          fields.push(current.trim());
+          current = '';
+        } else {
+          current += ch;
+        }
+      }
+      fields.push(current.trim());
+
+      const clean = (s: string) => s.replace(/-0-/g, '').trim();
+
+      matches.push({
+        sdn_id: clean(fields[0] || ''),
+        name: clean(fields[1] || ''),
+        type: clean(fields[2] || ''),
+        country: clean(fields[3] || ''),
+        program: clean(fields[4] || ''),
+        remarks: clean(fields[11] || fields[fields.length - 1] || ''),
+      });
+
+      if (matches.length >= 25) break;
+    }
+
     return {
-      message:
-        'Sanctions search is available with OPENSANCTIONS_API_KEY (get free key at https://opensanctions.org). ' +
-        'OFAC SDN list can also be browsed at https://sanctionssearch.ofac.treas.gov/',
+      source: 'OFAC SDN List (US Treasury)',
       query: name,
-      manual_search_url: `https://sanctionssearch.ofac.treas.gov/`,
+      total_matches: matches.length,
+      results: matches,
+      note: 'Searched the official OFAC Specially Designated Nationals list',
+      list_date: 'Current as of latest Treasury publication',
+    };
+  } catch {
+    return {
+      query: name,
+      message:
+        'Sanctions search temporarily unavailable. ' +
+        'Set OPENSANCTIONS_API_KEY for reliable access (https://opensanctions.org).',
+      manual_search_url: 'https://sanctionssearch.ofac.treas.gov/',
     };
   }
 };

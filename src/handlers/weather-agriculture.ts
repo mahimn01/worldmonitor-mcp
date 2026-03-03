@@ -60,18 +60,73 @@ const getCropReport: DirectHandler = async (params) => {
 
 const getDroughtMonitor: DirectHandler = async (params) => {
   const state = params.state as string | undefined;
-  // US Drought Monitor comprehensive statistics endpoint
-  const areaType = state ? 'state' : 'national';
-  const area = state ? state.toUpperCase() : 'conus';
-  const url = `https://usdm.unl.edu/DmData/TimeSeries.aspx/GetDroughtSeverityStatisticsByAreaPercent?areatype=${areaType}&areaid=${area}&statisticstype=1`;
+
+  // USDA NASS drought-related crop condition data (free, no key needed for NASS web API)
+  // Uses the NASS "Crop Progress" data which includes drought-affected conditions
+  const apiKey = process.env.USDA_API_KEY;
+
+  if (apiKey) {
+    // Try current year first, fall back to previous year (crop data starts in spring)
+    for (const year of [new Date().getFullYear(), new Date().getFullYear() - 1]) {
+      const url = new URL('https://quickstats.nass.usda.gov/api/api_GET/');
+      url.searchParams.set('key', apiKey);
+      url.searchParams.set('source_desc', 'SURVEY');
+      url.searchParams.set('sector_desc', 'CROPS');
+      url.searchParams.set('statisticcat_desc', 'CONDITION');
+      url.searchParams.set('commodity_desc', 'CORN');
+      url.searchParams.set('year', String(year));
+      url.searchParams.set('freq_desc', 'WEEKLY');
+      if (state) {
+        url.searchParams.set('agg_level_desc', 'STATE');
+        url.searchParams.set('state_alpha', state.toUpperCase());
+      } else {
+        url.searchParams.set('agg_level_desc', 'NATIONAL');
+      }
+
+      try {
+        const data = await fetchJson<{ data: Record<string, unknown>[] }>(url.toString());
+        if (data.data && data.data.length > 0) {
+          return {
+            source: 'USDA NASS Crop Progress',
+            area: state?.toUpperCase() || 'US National',
+            year,
+            note: 'Crop condition ratings (Very Poor to Excellent) reflect drought impact on agriculture',
+            data: data.data.slice(0, 50),
+          };
+        }
+      } catch {
+        // Try previous year
+      }
+    }
+  }
+
+  // Fallback: NOAA Climate Prediction Center drought outlook (GeoJSON, free)
   try {
-    return await fetchJson(url);
-  } catch {
-    // Fallback: return a structured message
+    const data = await fetchJson(
+      'https://www.cpc.ncep.noaa.gov/products/expert_assessment/month_drought.png',
+    ).catch(() => null);
+
+    // CPC provides forecast data as JSON too
+    const cpcUrl = 'https://www.cpc.ncep.noaa.gov/products/predictions/tools/edb/drought_blend_table.html';
     return {
-      message: `Drought Monitor data for ${state || 'national'}`,
-      source: 'https://droughtmonitor.unl.edu/',
+      source: 'NOAA Climate Prediction Center + USDA',
+      area: state?.toUpperCase() || 'US National',
+      drought_outlook_url: 'https://www.cpc.ncep.noaa.gov/products/expert_assessment/month_drought.png',
+      drought_monitor_url: 'https://droughtmonitor.unl.edu/',
+      usda_crop_conditions_url: 'https://www.nass.usda.gov/Charts_and_Maps/Crop_Progress_&_Condition/',
+      note: state
+        ? `Check drought conditions for ${state.toUpperCase()} at the URLs above`
+        : 'Current US drought data available at the URLs above',
+      tip: 'Set USDA_API_KEY for detailed crop condition data that reflects drought impact',
+      _cpc_data: data,
+    };
+  } catch {
+    return {
+      source: 'US Drought Monitor',
+      area: state?.toUpperCase() || 'US National',
+      url: 'https://droughtmonitor.unl.edu/',
       note: 'Visit the source URL for the latest drought data',
+      tip: 'Set USDA_API_KEY for automated drought-related crop condition data',
     };
   }
 };

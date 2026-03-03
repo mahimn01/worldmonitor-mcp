@@ -2,18 +2,89 @@
  * Congressional trading direct handlers — House and Senate stock trades
  * from public STOCK Act disclosures.
  *
- * Uses the Capitol Trades public data and Senate/House EFD systems.
- * Finnhub premium tier also supported if FINNHUB_API_KEY is set.
+ * Primary: Scrapes Capitol Trades HTML table (free, no key needed).
+ * Fallback: Finnhub premium tier if FINNHUB_API_KEY is set.
  */
 
 import { DirectHandler } from '../types.js';
 import { fetchJson, fetchText } from './_http.js';
 
+const CAPITOL_TRADES_BASE = 'https://www.capitoltrades.com';
 const FINNHUB_BASE = 'https://finnhub.io/api/v1';
+
+const BROWSER_UA =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+interface ParsedTrade {
+  politician: string;
+  party: string;
+  chamber: string;
+  state: string;
+  issuer: string;
+  published: string;
+  traded: string;
+  filed_after: string;
+  owner: string;
+  type: string;
+  size: string;
+  price: string;
+}
+
+/**
+ * Parse trade rows from Capitol Trades HTML table.
+ */
+function parseTradesTable(html: string): ParsedTrade[] {
+  const trades: ParsedTrade[] = [];
+
+  // Extract table body rows
+  const tbodyMatch = html.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/i);
+  if (!tbodyMatch) return trades;
+
+  const rows = tbodyMatch[1].match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) || [];
+
+  for (const row of rows) {
+    // Extract text from each cell
+    const cells = row.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [];
+    const cellTexts = cells.map((c) =>
+      c
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim(),
+    );
+
+    if (cellTexts.length < 8) continue;
+
+    // Cell order: Politician, Traded Issuer, Published, Traded, Filed After, Owner, Type, Size, Price
+    const politicianText = cellTexts[0] || '';
+    // Parse "Name Party Chamber State" pattern
+    const partyMatch = politicianText.match(/(Democrat|Republican|Independent)/i);
+    const chamberMatch = politicianText.match(/(House|Senate)/i);
+    const stateMatch = politicianText.match(/\b([A-Z]{2})\s*$/);
+
+    trades.push({
+      politician: politicianText
+        .replace(/(Democrat|Republican|Independent|House|Senate)/gi, '')
+        .replace(/\b[A-Z]{2}\s*$/, '')
+        .trim(),
+      party: partyMatch?.[1] || '',
+      chamber: chamberMatch?.[1] || '',
+      state: stateMatch?.[1] || '',
+      issuer: cellTexts[1] || '',
+      published: cellTexts[2] || '',
+      traded: cellTexts[3] || '',
+      filed_after: cellTexts[4] || '',
+      owner: cellTexts[5] || '',
+      type: cellTexts[6] || '',
+      size: cellTexts[7] || '',
+      price: cellTexts[8] || '',
+    });
+  }
+
+  return trades;
+}
 
 /**
  * Try Finnhub congressional trading (premium endpoint).
- * Returns null if key is missing or endpoint is not accessible.
  */
 async function tryFinnhub(
   params: Record<string, unknown>,
@@ -37,46 +108,91 @@ async function tryFinnhub(
   try {
     return await fetchJson(url.toString());
   } catch {
-    return null; // Premium endpoint not accessible on free tier
+    return null;
   }
 }
 
 const listCongressTrades: DirectHandler = async (params) => {
-  // Try Finnhub first (premium)
+  const pageSize = (params.limit as number) || 20;
+
+  // Primary: scrape Capitol Trades HTML
+  try {
+    const url = `${CAPITOL_TRADES_BASE}/trades?pageSize=${pageSize}`;
+    const html = await fetchText(url, {
+      headers: { 'User-Agent': BROWSER_UA, Accept: 'text/html' },
+      timeout: 20_000,
+    });
+
+    const trades = parseTradesTable(html);
+    if (trades.length > 0) {
+      return {
+        source: 'Capitol Trades',
+        total: trades.length,
+        trades,
+        note: 'Recent congressional stock trades from STOCK Act disclosures',
+        source_url: url,
+      };
+    }
+  } catch {
+    // Fall through
+  }
+
+  // Fallback: Finnhub premium
   const finnhubData = await tryFinnhub(params);
   if (finnhubData) return finnhubData;
 
-  // Fallback: helpful information about available sources
   return {
     message:
-      'Congressional trading data requires a Finnhub premium subscription. ' +
-      'Free alternatives for manual research:',
+      'Congressional trading data temporarily unavailable. ' +
+      'Browse manually at https://www.capitoltrades.com/trades',
     sources: [
-      {
-        name: 'Capitol Trades',
-        url: 'https://www.capitoltrades.com/trades',
-        description:
-          'Free web interface for browsing congressional stock trades',
-      },
-      {
-        name: 'Senate EFD',
-        url: 'https://efdsearch.senate.gov/search/',
-        description: 'Official Senate financial disclosure search',
-      },
+      { name: 'Capitol Trades', url: 'https://www.capitoltrades.com/trades' },
+      { name: 'Senate EFD', url: 'https://efdsearch.senate.gov/search/' },
       {
         name: 'House EFD',
         url: 'https://disclosures-clerk.house.gov/FinancialDisclosure',
-        description: 'Official House financial disclosure search',
       },
     ],
-    tip: 'Use the extract_article tool to scrape data from Capitol Trades pages.',
   };
 };
 
 const getCongressMemberTrades: DirectHandler = async (params) => {
   const member = params.member as string;
+  const pageSize = (params.limit as number) || 20;
 
-  // Try Finnhub first
+  // Primary: scrape Capitol Trades with politician filter
+  try {
+    const url = `${CAPITOL_TRADES_BASE}/trades?politician=${encodeURIComponent(member)}&pageSize=${pageSize}`;
+    const html = await fetchText(url, {
+      headers: { 'User-Agent': BROWSER_UA, Accept: 'text/html' },
+      timeout: 20_000,
+    });
+
+    const trades = parseTradesTable(html);
+    if (trades.length > 0) {
+      return {
+        source: 'Capitol Trades',
+        member,
+        total: trades.length,
+        trades,
+        source_url: url,
+      };
+    }
+
+    // Even if no trades in table, may mean the search returned nothing
+    return {
+      source: 'Capitol Trades',
+      member,
+      total: 0,
+      trades: [],
+      note: `No recent trades found for "${member}". Try a different name spelling.`,
+      source_url: url,
+    };
+  } catch {
+    // Fall through
+  }
+
+  // Fallback: Finnhub premium
   const finnhubData = await tryFinnhub(params);
   if (finnhubData) {
     const data = finnhubData as { data?: Array<Record<string, unknown>> };
@@ -86,16 +202,14 @@ const getCongressMemberTrades: DirectHandler = async (params) => {
     return {
       member,
       total: trades.length,
-      trades: trades.slice(0, (params.limit as number) || 50),
+      trades: trades.slice(0, pageSize),
     };
   }
 
   return {
     member,
-    message:
-      'Congressional member trade lookup requires Finnhub premium. ' +
-      'Use the extract_article tool to scrape Capitol Trades.',
-    search_url: `https://www.capitoltrades.com/trades?politician=${encodeURIComponent(member)}`,
+    message: 'Congressional member trade lookup temporarily unavailable.',
+    search_url: `${CAPITOL_TRADES_BASE}/trades?politician=${encodeURIComponent(member)}`,
   };
 };
 
