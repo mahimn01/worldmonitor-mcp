@@ -32,8 +32,15 @@ const getEconomicCalendar: DirectHandler = async (params) => {
     return fetchJson(url.toString());
   }
 
-  // Fallback: FRED release dates
-  const fredKey = process.env.FRED_API_KEY || 'DEMO_KEY';
+  // Fallback: FRED release dates (requires FRED_API_KEY)
+  const fredKey = process.env.FRED_API_KEY;
+  if (!fredKey) {
+    throw new Error(
+      'Economic calendar requires FINNHUB_API_KEY or FRED_API_KEY environment variable. ' +
+        'Get a free Finnhub key at https://finnhub.io/register or ' +
+        'a free FRED key at https://fred.stlouisfed.org/docs/api/api_key.html',
+    );
+  }
   return fetchJson(
     `https://api.stlouisfed.org/fred/releases/dates?api_key=${fredKey}&file_type=json&include_release_dates_with_no_data=true&realtime_start=${from}&realtime_end=${to}`,
   );

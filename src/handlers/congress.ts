@@ -1,91 +1,72 @@
 /**
  * Congressional trading direct handlers — House and Senate stock trades
- * from public STOCK Act disclosures.
+ * from public STOCK Act disclosures via Finnhub API.
+ *
+ * Requires FINNHUB_API_KEY environment variable.
  */
 
 import { DirectHandler } from '../types.js';
 import { fetchJson } from './_http.js';
 
-const HOUSE_URL =
-  'https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json';
-const SENATE_URL =
-  'https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json';
+const FINNHUB_BASE = 'https://finnhub.io/api/v1';
 
-// In-memory cache to avoid re-downloading large JSON files every call
-let houseCache: Record<string, unknown>[] | null = null;
-let senateCache: Record<string, unknown>[] | null = null;
-let cacheTime = 0;
-const CACHE_TTL = 5 * 60 * 1000; // 5 min
-
-async function loadTrades(): Promise<{
-  house: Record<string, unknown>[];
-  senate: Record<string, unknown>[];
-}> {
-  const now = Date.now();
-  if (houseCache && senateCache && now - cacheTime < CACHE_TTL) {
-    return { house: houseCache, senate: senateCache };
+function getApiKey(): string {
+  const key = process.env.FINNHUB_API_KEY;
+  if (!key) {
+    throw new Error(
+      'FINNHUB_API_KEY environment variable is required for congressional trading data. ' +
+        'Get a free key at https://finnhub.io/register',
+    );
   }
-  const [house, senate] = await Promise.all([
-    fetchJson<Record<string, unknown>[]>(HOUSE_URL, { timeout: 20_000 }),
-    fetchJson<Record<string, unknown>[]>(SENATE_URL, { timeout: 20_000 }),
-  ]);
-  houseCache = house;
-  senateCache = senate;
-  cacheTime = now;
-  return { house, senate };
+  return key;
 }
 
 const listCongressTrades: DirectHandler = async (params) => {
-  const chamber = ((params.chamber as string) || 'both').toLowerCase();
-  const ticker = params.ticker as string | undefined;
-  const limit = (params.limit as number) || 50;
+  const key = getApiKey();
+  const symbol = (params.ticker as string) || '';
+  const url = new URL(`${FINNHUB_BASE}/stock/congressional-trading`);
+  url.searchParams.set('token', key);
+  if (symbol) url.searchParams.set('symbol', symbol.toUpperCase());
 
-  const { house, senate } = await loadTrades();
-  let trades: Record<string, unknown>[] = [];
+  const fromDate =
+    (params.from_date as string) ||
+    new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+  const toDate =
+    (params.to_date as string) || new Date().toISOString().slice(0, 10);
+  url.searchParams.set('from', fromDate);
+  url.searchParams.set('to', toDate);
 
-  if (chamber === 'house' || chamber === 'both') trades.push(...house);
-  if (chamber === 'senate' || chamber === 'both') trades.push(...senate);
-
-  if (ticker) {
-    const upper = ticker.toUpperCase();
-    trades = trades.filter(
-      (t) => (t.ticker as string)?.toUpperCase() === upper,
-    );
-  }
-
-  // Sort by disclosure_date descending
-  trades.sort((a, b) =>
-    ((b.disclosure_date as string) || '').localeCompare(
-      (a.disclosure_date as string) || '',
-    ),
-  );
-
-  return { total: trades.length, trades: trades.slice(0, limit) };
+  return fetchJson(url.toString());
 };
 
 const getCongressMemberTrades: DirectHandler = async (params) => {
+  const key = getApiKey();
+  // Finnhub doesn't have a per-member endpoint, so we fetch recent trades
+  // and filter by name
   const member = (params.member as string).toLowerCase();
   const limit = (params.limit as number) || 50;
 
-  const { house, senate } = await loadTrades();
-  const all = [...house, ...senate];
+  const fromDate = new Date(Date.now() - 365 * 86400000)
+    .toISOString()
+    .slice(0, 10);
+  const toDate = new Date().toISOString().slice(0, 10);
 
-  const memberTrades = all.filter((t) =>
-    ((t.representative as string) || (t.senator as string) || '')
-      .toLowerCase()
-      .includes(member),
-  );
+  const url = new URL(`${FINNHUB_BASE}/stock/congressional-trading`);
+  url.searchParams.set('token', key);
+  url.searchParams.set('from', fromDate);
+  url.searchParams.set('to', toDate);
 
-  memberTrades.sort((a, b) =>
-    ((b.disclosure_date as string) || '').localeCompare(
-      (a.disclosure_date as string) || '',
-    ),
+  const data = (await fetchJson(url.toString())) as {
+    data?: Array<Record<string, unknown>>;
+  };
+  const trades = (data.data || []).filter((t) =>
+    ((t.name as string) || '').toLowerCase().includes(member),
   );
 
   return {
     member: params.member,
-    total: memberTrades.length,
-    trades: memberTrades.slice(0, limit),
+    total: trades.length,
+    trades: trades.slice(0, limit),
   };
 };
 

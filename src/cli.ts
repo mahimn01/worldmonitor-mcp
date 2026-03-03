@@ -157,7 +157,7 @@ function buildProgram(): Command {
         const params: Record<string, unknown> = {};
         if (capturedTool.params) {
           for (const [key, def] of Object.entries(capturedTool.params)) {
-            const raw = opts[camelCase(key)];
+            const raw = opts[camelCase(key)] ?? opts[key];
             if (raw === undefined) continue;
 
             switch (def.type) {

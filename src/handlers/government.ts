@@ -59,6 +59,17 @@ const getGovernmentContracts: DirectHandler = async (params) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         filters,
+        fields: [
+          'Award ID',
+          'Recipient Name',
+          'Award Amount',
+          'Awarding Agency',
+          'Awarding Sub Agency',
+          'Award Type',
+          'Start Date',
+          'End Date',
+          'Description',
+        ],
         limit,
         page: 1,
         sort: 'Award Amount',
@@ -71,14 +82,52 @@ const getGovernmentContracts: DirectHandler = async (params) => {
 };
 
 const getSanctionsSearch: DirectHandler = async (params) => {
+  const name = params.name as string;
+
+  // Use OpenSanctions API if key is available
+  const osKey = process.env.OPENSANCTIONS_API_KEY;
+  if (osKey) {
+    const url = new URL('https://api.opensanctions.org/search/default');
+    url.searchParams.set('q', name);
+    if (params.type) url.searchParams.set('schema', params.type as string);
+    url.searchParams.set('limit', '25');
+    return fetchJson(url.toString(), {
+      headers: { Authorization: `ApiKey ${osKey}` },
+    });
+  }
+
+  // Fallback: OFAC SDN search via sanctions explorer (free, no key)
   const url = new URL(
-    'https://api.trade.gov/gateway/v1/consolidated_screening_list/search',
+    'https://sanctionssearch.ofac.treas.gov/Details.aspx/SearchList',
   );
-  url.searchParams.set('api_key', process.env.TRADE_GOV_API_KEY || 'ii1PmMOz3cAkH3wy1O3VAvL0');
-  url.searchParams.set('q', params.name as string);
-  if (params.type) url.searchParams.set('type', params.type as string);
-  url.searchParams.set('size', '25');
-  return fetchJson(url.toString());
+  try {
+    const result = await fetchJson(url.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        NameValue: name,
+        CityValue: '',
+        StateValue: '',
+        CountryValue: '',
+        AddressValue: '',
+        SDNType: (params.type as string) || '',
+        ListType: '',
+        ProgramValue: '',
+        PageNumber: 1,
+      }),
+      tlsPermissive: true,
+    });
+    return result;
+  } catch {
+    // OFAC search API is unreliable; return helpful message
+    return {
+      message:
+        'Sanctions search is available with OPENSANCTIONS_API_KEY (get free key at https://opensanctions.org). ' +
+        'OFAC SDN list can also be browsed at https://sanctionssearch.ofac.treas.gov/',
+      query: name,
+      manual_search_url: `https://sanctionssearch.ofac.treas.gov/`,
+    };
+  }
 };
 
 export const governmentHandlers: Record<string, DirectHandler> = {
