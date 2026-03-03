@@ -1,0 +1,56 @@
+{
+  "name": "worldmonitor-mcp",
+  "version": "1.0.0",
+  "description": "MCP server + CLI for accessing World Monitor intelligence data. Provides 80+ tools covering military, financial, geopolitical, cyber, infrastructure, and environmental data sources.",
+  "type": "module",
+  "bin": {
+    "worldmonitor": "./bin/worldmonitor.js"
+  },
+  "main": "./dist/mcp.js",
+  "exports": {
+    ".": "./dist/mcp.js",
+    "./cli": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "mcp": "tsx src/mcp.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "worldmonitor",
+    "geopolitical",
+    "intelligence",
+    "osint",
+    "military",
+    "finance",
+    "cli",
+    "claude",
+    "ai-tools"
+  ],
+  "author": "mahimn01",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "commander": "^13.1.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
