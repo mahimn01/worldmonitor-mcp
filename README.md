@@ -1,6 +1,6 @@
 # worldmonitor-mcp
 
-MCP server + CLI for accessing [World Monitor](https://worldmonitor.app) intelligence data. Provides **77 tools** across **22 services** covering military, financial, geopolitical, cyber, infrastructure, and environmental data sources.
+MCP server + CLI for accessing [World Monitor](https://worldmonitor.app) intelligence data. Provides **107 tools** across **32 services** covering military, financial, geopolitical, cyber, infrastructure, environmental, and direct-API financial intelligence sources.
 
 Works with **Claude Code**, **Cursor**, **Windsurf**, and any MCP-compatible AI assistant.
 
@@ -37,7 +37,7 @@ npm run build
 # Run commands
 node bin/worldmonitor.js seismology list-earthquakes --min_magnitude 6
 node bin/worldmonitor.js market list-crypto-quotes --ids bitcoin,ethereum,solana
-node bin/worldmonitor.js intelligence get-country-intel-brief --country_code UA
+node bin/worldmonitor.js sec-edgar get-sec-insider-trades --ticker AAPL
 
 # Or link globally
 npm link
@@ -60,14 +60,14 @@ git clone https://github.com/mahimn01/worldmonitor-mcp.git
 cd worldmonitor-mcp
 npm install      # install dependencies
 npm run build    # compile TypeScript
-npm test         # run 211 tests (all should pass)
+npm test         # run 297 tests (all should pass)
 ```
 
-That's it. No API keys needed — the tool calls the public World Monitor API at `https://worldmonitor.app`.
+Most tools work with zero configuration. The 77 proxy tools call the public World Monitor API. The 30 direct-API tools call free external APIs — some optionally benefit from API keys (see below).
 
 ## Configuration
 
-Configuration via environment variables or CLI flags:
+### Environment Variables
 
 | Variable | CLI Flag | Default | Description |
 |---|---|---|---|
@@ -75,13 +75,94 @@ Configuration via environment variables or CLI flags:
 | `WORLDMONITOR_API_KEY` | `--api-key` | — | API key (if your instance requires auth) |
 | `WORLDMONITOR_TIMEOUT` | `--timeout` | `30000` | Request timeout in ms |
 
-Copy `.env.example` to `.env` to customize:
+### Optional API Keys (all free tier)
+
+Copy `.env.example` to `.env` and add keys for enhanced functionality:
 
 ```bash
 cp .env.example .env
 ```
 
-## All 77 Tools
+| Key | Tools Enhanced | Get Free Key |
+|---|---|---|
+| `FINNHUB_API_KEY` | Earnings calendar, IPO calendar | [finnhub.io/register](https://finnhub.io/register) |
+| `FRED_API_KEY` | Economic calendar (primary source) | [fred.stlouisfed.org](https://fred.stlouisfed.org/docs/api/api_key.html) |
+| `USDA_API_KEY` | Crop reports, drought monitor | [quickstats.nass.usda.gov/api](https://quickstats.nass.usda.gov/api) |
+| `OPENSANCTIONS_API_KEY` | Enhanced sanctions search | [opensanctions.org](https://opensanctions.org) |
+
+**Without any keys**, the following direct tools still work fully: SEC EDGAR (5 tools), Treasury (3), CFTC (2), On-Chain DeFi (4), Article Extraction (2), NOAA Weather, Federal Register, Government Contracts, Congressional Trades, OFAC Sanctions, Fear & Greed Index, CBOE Options Flow, Reddit Sentiment.
+
+## All 107 Tools
+
+### SEC EDGAR (5 tools) — Direct API, no key needed
+| Tool | Description |
+|---|---|
+| `get_sec_insider_trades` | Form 4 insider trading filings — who's buying/selling |
+| `get_sec_13f_holdings` | 13F institutional holdings — what hedge funds own |
+| `get_sec_filings` | Company SEC filings (10-K, 10-Q, 8-K, etc.) |
+| `get_sec_company_facts` | XBRL financial facts — revenue, EPS, assets directly from filings |
+| `get_sec_full_text_search` | Full-text search across all SEC filings |
+
+### Treasury (3 tools) — Direct API, no key needed
+| Tool | Description |
+|---|---|
+| `get_treasury_rates` | Daily Treasury yield curve rates (T-bills through 30-year bonds) |
+| `get_treasury_auctions` | Recent Treasury auction results |
+| `get_national_debt` | Current US national debt figures |
+
+### CFTC (2 tools) — Direct API, no key needed
+| Tool | Description |
+|---|---|
+| `get_cot_positions` | Commitments of Traders data — commercial/non-commercial positioning |
+| `get_cot_summary` | COT summary across major futures contracts |
+
+### Congress (2 tools) — Capitol Trades scraping, no key needed
+| Tool | Description |
+|---|---|
+| `list_congress_trades` | Recent congressional stock trades from STOCK Act disclosures |
+| `get_congress_member_trades` | Trades by a specific member of Congress |
+
+### Economic Calendar (3 tools) — FRED free key recommended
+| Tool | Description |
+|---|---|
+| `get_economic_calendar` | Upcoming economic data releases (uses FRED API) |
+| `get_earnings_calendar` | Upcoming earnings reports (Finnhub free tier) |
+| `get_ipo_calendar` | Upcoming IPOs (Finnhub free tier) |
+
+### Weather & Agriculture (3 tools) — USDA key recommended
+| Tool | Description |
+|---|---|
+| `get_weather_forecast` | NOAA 7-day weather forecast for any US lat/lon |
+| `get_crop_report` | USDA crop production data by commodity and state |
+| `get_drought_monitor` | Drought conditions via USDA crop condition ratings |
+
+### Government (3 tools) — Direct API, no key needed
+| Tool | Description |
+|---|---|
+| `search_federal_register` | Search Federal Register for rules, proposed rules, notices |
+| `get_government_contracts` | Federal contract awards from USAspending.gov |
+| `get_sanctions_search` | OFAC SDN sanctions list search (5.4M+ entries) |
+
+### On-Chain DeFi (4 tools) — DefiLlama, no key needed
+| Tool | Description |
+|---|---|
+| `get_chain_tvl` | Total Value Locked by blockchain (Ethereum, Solana, etc.) |
+| `get_protocol_tvl` | TVL for a specific DeFi protocol |
+| `get_stablecoin_flows` | Stablecoin market cap and chain distribution |
+| `get_defi_yields` | Top DeFi yield opportunities across protocols |
+
+### Sentiment (3 tools) — Free, no key needed
+| Tool | Description |
+|---|---|
+| `get_social_sentiment` | Reddit r/wallstreetbets sentiment for any ticker — buzz level, top posts, scores |
+| `get_fear_greed_detail` | Crypto Fear & Greed Index with 30 days of history and trend analysis |
+| `get_options_flow` | CBOE full options chain — put/call ratio, top contracts by volume, IV, sentiment |
+
+### Article Extraction (2 tools) — Direct fetch, no key needed
+| Tool | Description |
+|---|---|
+| `extract_article` | Extract full article text from any URL (bypasses soft paywalls via Google Cache/Archive.org) |
+| `search_and_extract` | Search GDELT for articles on a topic, then extract the best match |
 
 ### Military (7 tools)
 | Tool | Description |
@@ -219,8 +300,56 @@ cp .env.example .env
 ## CLI Usage Examples
 
 ```bash
-# List all tools
+# List all 107 tools
 worldmonitor --list-tools
+
+# === Direct API Tools (no key needed) ===
+
+# SEC EDGAR
+worldmonitor sec-edgar get-sec-insider-trades --ticker AAPL
+worldmonitor sec-edgar get-sec-13f-holdings --cik 0001067983  # Berkshire Hathaway
+worldmonitor sec-edgar get-sec-company-facts --ticker MSFT
+worldmonitor sec-edgar get-sec-full-text-search --query "artificial intelligence"
+
+# Treasury
+worldmonitor treasury get-treasury-rates
+worldmonitor treasury get-treasury-auctions --security_type Bill
+worldmonitor treasury get-national-debt
+
+# CFTC Positioning
+worldmonitor cftc get-cot-positions --contract_code 099741  # S&P 500
+worldmonitor cftc get-cot-summary
+
+# Congressional Trading
+worldmonitor congress list-congress-trades
+worldmonitor congress get-congress-member-trades --member "Pelosi"
+
+# On-Chain DeFi
+worldmonitor onchain get-chain-tvl
+worldmonitor onchain get-protocol-tvl --protocol aave
+worldmonitor onchain get-stablecoin-flows
+worldmonitor onchain get-defi-yields
+
+# Sentiment & Options
+worldmonitor sentiment get-social-sentiment --symbol TSLA
+worldmonitor sentiment get-options-flow --symbol SPY
+worldmonitor sentiment get-fear-greed-detail
+
+# Government & Sanctions
+worldmonitor government search-federal-register --q "cryptocurrency"
+worldmonitor government get-government-contracts --keyword "artificial intelligence"
+worldmonitor government get-sanctions-search --name "Putin"
+
+# Weather & Agriculture
+worldmonitor weather-agriculture get-weather-forecast --lat 40.7128 --lon -74.006
+worldmonitor weather-agriculture get-crop-report --commodity corn --state IL
+worldmonitor weather-agriculture get-drought-monitor --state CA
+
+# Article Extraction
+worldmonitor article extract-article --url "https://example.com/article"
+worldmonitor article search-and-extract --query "Fed interest rate decision"
+
+# === Proxy Tools (via World Monitor API) ===
 
 # Military
 worldmonitor military list-flights --operator US --aircraft_type TANKER
@@ -231,7 +360,6 @@ worldmonitor military get-usni-fleet-report
 worldmonitor market list-market-quotes --symbols AAPL,MSFT,GOOG,^VIX
 worldmonitor market list-crypto-quotes --ids bitcoin,ethereum,solana
 worldmonitor market list-gulf-quotes
-worldmonitor market get-sector-summary --period 1d
 
 # Economic
 worldmonitor economic get-fred-series --series_id GDP --limit 20
@@ -243,22 +371,9 @@ worldmonitor intelligence get-risk-scores
 worldmonitor intelligence get-country-intel-brief --country_code CN
 worldmonitor intelligence search-gdelt-documents --query "Taiwan strait" --timespan 24h
 
-# Conflict
-worldmonitor conflict list-acled-events --country UA
-worldmonitor conflict get-humanitarian-summary --country_code SY
-
 # Natural Events
 worldmonitor seismology list-earthquakes --min_magnitude 6
 worldmonitor wildfire list-fire-detections --ne_lat 45 --ne_lon -110 --sw_lat 35 --sw_lon -125
-worldmonitor climate list-climate-anomalies
-
-# Infrastructure
-worldmonitor infrastructure list-internet-outages --country IR
-worldmonitor infrastructure get-cable-health
-
-# Bulk data
-worldmonitor legacy get-bootstrap-data --tier fast
-worldmonitor legacy get-bootstrap-data --keys earthquakes,outages,macroSignals
 
 # Output formats
 worldmonitor seismology list-earthquakes --format json          # compact JSON
@@ -296,13 +411,16 @@ Add to your MCP config (e.g. `~/.cursor/mcp.json`):
 }
 ```
 
-Once connected, your AI assistant can call any of the 77 tools directly. For example, you can ask:
+Once connected, your AI assistant can call any of the 107 tools directly. For example:
 
+- "What are Nancy Pelosi's recent stock trades?"
+- "Show me SEC insider trades for Apple"
+- "What's the put/call ratio on SPY options right now?"
+- "Is anyone on the OFAC sanctions list named Petrov?"
+- "Show me the Treasury yield curve"
+- "What's the latest COT positioning for S&P 500 futures?"
 - "What earthquakes happened today above magnitude 5?"
-- "Show me the current military theater posture in Europe"
-- "What are Bitcoin and Ethereum prices right now?"
-- "Are there any internet outages in Iran?"
-- "Get the latest USNI fleet deployment report"
+- "Get the DeFi TVL breakdown by chain"
 
 ## Architecture
 
@@ -313,45 +431,53 @@ src/
 ├── client.ts              # HTTP client for World Monitor API
 ├── config.ts              # Configuration loading (env vars + overrides)
 ├── output.ts              # Output formatting (json, json-pretty, raw)
-├── types.ts               # TypeScript type definitions
-├── services/
-│   ├── index.ts           # Service registry (auto-registers all services)
+├── types.ts               # TypeScript type definitions (DirectHandler type)
+├── handlers/              # Direct API handlers (call external APIs directly)
+│   ├── index.ts           # Handler registry — maps tool names to functions
+│   ├── _http.ts           # Shared fetch wrapper (TLS bypass, redirects, timeouts)
+│   ├── sec-edgar.ts       # 5 handlers → SEC EDGAR APIs
+│   ├── treasury.ts        # 3 handlers → Treasury Fiscal Data API
+│   ├── cftc.ts            # 2 handlers → CFTC Socrata API
+│   ├── congress.ts        # 2 handlers → Capitol Trades scraping
+│   ├── economic-calendar.ts # 3 handlers → FRED + Finnhub
+│   ├── weather-agriculture.ts # 3 handlers → NOAA + USDA NASS
+│   ├── government.ts      # 3 handlers → Federal Register, USAspending, OFAC
+│   ├── onchain.ts         # 4 handlers → DefiLlama
+│   ├── sentiment.ts       # 3 handlers → Reddit, alternative.me, CBOE
+│   └── article.ts         # 2 handlers → Direct fetch + Google Cache + Archive.org
+├── services/              # Declarative service + tool definitions
+│   ├── index.ts           # Service registry (auto-registers all 32 services)
 │   ├── military.ts        # 7 tools
 │   ├── market.ts          # 8 tools
 │   ├── economic.ts        # 8 tools
-│   ├── intelligence.ts    # 6 tools
-│   ├── infrastructure.ts  # 5 tools
-│   ├── conflict.ts        # 4 tools
-│   ├── trade.ts           # 4 tools
-│   ├── research.ts        # 4 tools
-│   ├── news.ts            # 3 tools
-│   ├── supply-chain.ts    # 3 tools
-│   ├── maritime.ts        # 2 tools
-│   ├── displacement.ts    # 2 tools
-│   ├── aviation.ts        # 1 tool
-│   ├── cyber.ts           # 1 tool
-│   ├── climate.ts         # 1 tool
-│   ├── seismology.ts      # 1 tool
-│   ├── wildfire.ts        # 1 tool
-│   ├── prediction.ts      # 1 tool
-│   ├── unrest.ts          # 1 tool
-│   ├── giving.ts          # 1 tool
-│   ├── positive-events.ts # 1 tool
+│   ├── sec-edgar.ts       # 5 tools (direct)
+│   ├── ... (32 service files total)
 │   └── legacy.ts          # 12 tools (non-proto endpoints)
-└── __tests__/             # 211 tests
+└── __tests__/             # 297 tests
     ├── client.test.ts
     ├── config.test.ts
     ├── output.test.ts
     ├── cli.test.ts
     ├── mcp.test.ts
+    ├── handlers/
+    │   └── direct-integration.test.ts
     └── services/
         ├── registry.test.ts
         └── integration.test.ts
 ```
 
-**Data-driven design:** Every tool is a declarative config object. The CLI and MCP server both iterate over the same service definitions to auto-register commands/tools. To add a new tool, just add an object to a service file — no wiring required.
+### Dual Execution Path
+
+```
+Proxy tools (77):   Claude → MCP/CLI → WorldMonitorClient → worldmonitor.app → external API
+Direct tools (30):  Claude → MCP/CLI → directHandlers[name]() → external API (direct)
+```
+
+**Data-driven design:** Every tool is a declarative config object. The CLI and MCP server both iterate over the same service definitions to auto-register commands/tools. Direct handlers are matched by tool name before falling through to the proxy path. To add a new tool, just add an object to a service file and optionally a handler function.
 
 ## Adding New Tools
+
+### Proxy Tool (uses World Monitor API)
 
 Add a tool definition to the appropriate service file:
 
@@ -361,41 +487,55 @@ Add a tool definition to the appropriate service file:
   name: 'my_new_tool',
   description: 'What this tool does',
   params: {
-    country: {
-      type: 'string',
-      description: 'Country code',
-      required: true,
-    },
+    country: { type: 'string', description: 'Country code', required: true },
   },
   endpoint: '/my-new-endpoint',
-  method: 'GET',  // or 'POST'
+  method: 'GET',
 }
 ```
 
-It will automatically appear in both the CLI (`worldmonitor military my-new-tool --country US`) and MCP server.
+### Direct API Tool (calls external API directly)
+
+1. Add the handler function in `src/handlers/`:
+
+```typescript
+// src/handlers/my-service.ts
+const myHandler: DirectHandler = async (params) => {
+  return fetchJson(`https://api.example.com/data?q=${params.query}`);
+};
+export const myHandlers = { my_new_tool: myHandler };
+```
+
+2. Register in `src/handlers/index.ts`
+3. Add tool definition in `src/services/my-service.ts`
+
+Both types automatically appear in the CLI and MCP server.
 
 ## Testing
 
 ```bash
-npm test              # run all 211 tests
+npm test              # run all 297 tests
 npm run test:watch    # watch mode
 npm run test:coverage # with coverage report
 ```
 
 ## Data Sources
 
-This tool provides access to data from 40+ external sources including:
+This tool provides access to data from 50+ external sources including:
 
+- **Financial Intelligence:** SEC EDGAR, US Treasury, CFTC, Capitol Trades, FRED, Finnhub, USDA NASS
+- **DeFi/Crypto:** DefiLlama, CoinGecko, Alternative.me, Mempool.space
+- **Market Data:** Finnhub, Yahoo Finance, CBOE Options
+- **Sentiment:** Reddit r/wallstreetbets, Fear & Greed Index, CBOE Put/Call Ratios
+- **Government:** Federal Register, USAspending, OFAC SDN List, NOAA
 - **Military:** OpenSky Network, Wingbits, USNI Fleet Tracker
-- **Financial:** Finnhub, Yahoo Finance, CoinGecko, Alternative.me, Mempool.space
-- **Economic:** FRED, World Bank, EIA, BIS
+- **Economic:** FRED (800k+ series), World Bank, EIA, BIS
 - **Geopolitical:** ACLED, UCDP, GDELT 2.0, HAPI/HDX
 - **Cyber:** Feodo Tracker, URLhaus, AlienVault OTX, AbuseIPDB, C2IntelFeeds
 - **Infrastructure:** Cloudflare Radar, NGA Maritime Warnings
 - **Trade:** WTO Timeseries API
 - **Natural Events:** USGS Earthquakes, NASA FIRMS, NASA/NOAA Climate
-- **Maritime:** AISStream.io, NGA
-- **News:** 150+ RSS feeds, Groq/OpenRouter/Ollama for AI summarization
+- **News:** 150+ RSS feeds, article extraction with paywall bypass
 - **Other:** Polymarket, Telegram OSINT, YouTube live detection
 
 ## License
