@@ -166,6 +166,46 @@ describe('MCP Tool Coverage', () => {
     'detect_youtube_live',
     'get_geo_location',
     'get_app_version',
+    // SEC EDGAR (direct)
+    'search_sec_filings',
+    'get_insider_transactions',
+    'get_institutional_holdings',
+    'get_company_filings',
+    'get_company_facts',
+    // Treasury (direct)
+    'get_treasury_rates',
+    'get_treasury_auctions',
+    'get_debt_to_penny',
+    // CFTC (direct)
+    'get_cot_report',
+    'get_cot_positions',
+    // Congress (direct)
+    'list_congress_trades',
+    'get_congress_member_trades',
+    // Economic Calendar (direct)
+    'get_economic_calendar',
+    'get_earnings_calendar',
+    'get_ipo_calendar',
+    // Weather & Agriculture (direct)
+    'get_weather_forecast',
+    'get_crop_report',
+    'get_drought_monitor',
+    // Government (direct)
+    'search_federal_register',
+    'get_government_contracts',
+    'get_sanctions_search',
+    // On-chain (direct)
+    'get_defi_overview',
+    'get_protocol_tvl',
+    'get_stablecoin_flows',
+    'get_chain_tvl',
+    // Sentiment (direct)
+    'get_social_sentiment',
+    'get_fear_greed_detail',
+    'get_options_flow',
+    // Article (direct)
+    'extract_article',
+    'search_and_extract',
   ];
 
   for (const toolName of expectedTools) {

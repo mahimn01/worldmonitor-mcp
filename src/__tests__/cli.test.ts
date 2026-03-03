@@ -63,6 +63,9 @@ describe('CLI Command Structure', () => {
     expect(postNames).toContain('deduct_situation');
     expect(postNames).toContain('get_aircraft_details_batch');
     expect(postNames).toContain('record_baseline_snapshot');
+    // Direct-handler POST tools
+    expect(postNames).toContain('search_and_extract');
+    expect(postNames).toContain('get_government_contracts');
   });
 });
 

@@ -17,6 +17,7 @@ import { loadConfig } from './config.js';
 import { WorldMonitorClient } from './client.js';
 import { allServices } from './services/index.js';
 import { ClientConfig, ParamDef } from './types.js';
+import { directHandlers } from './handlers/index.js';
 
 // ---------------------------------------------------------------------------
 // Zod schema generation from ParamDef
@@ -98,6 +99,39 @@ export async function startMcpServer(
             }
           }
 
+          // Check for direct handler first (external API calls)
+          const handler = directHandlers[tool.name];
+          if (handler) {
+            try {
+              const data = await handler(params);
+              return {
+                content: [
+                  {
+                    type: 'text' as const,
+                    text: JSON.stringify(data, null, 2),
+                  },
+                ],
+              };
+            } catch (err: unknown) {
+              const message =
+                err instanceof Error ? err.message : 'Unknown error';
+              return {
+                content: [
+                  {
+                    type: 'text' as const,
+                    text: JSON.stringify(
+                      { error: true, message },
+                      null,
+                      2,
+                    ),
+                  },
+                ],
+                isError: true,
+              };
+            }
+          }
+
+          // Proxy through WorldMonitorClient
           const result = await client.call(
             fullEndpoint,
             Object.keys(params).length > 0 ? params : undefined,

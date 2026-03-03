@@ -25,9 +25,20 @@ import { research } from './research.js';
 import { unrest } from './unrest.js';
 import { giving } from './giving.js';
 import { positiveEvents } from './positive-events.js';
+// Direct-handler services (call external APIs directly, not via worldmonitor.app)
+import { secEdgar } from './sec-edgar.js';
+import { treasury } from './treasury.js';
+import { cftc } from './cftc.js';
+import { congress } from './congress.js';
+import { economicCalendar } from './economic-calendar.js';
+import { weatherAgriculture } from './weather-agriculture.js';
+import { government } from './government.js';
+import { onchain } from './onchain.js';
+import { sentiment } from './sentiment.js';
+import { article } from './article.js';
 import { legacy } from './legacy.js';
 
-/** All proto-first services (21 services) */
+/** All proto-first services (31 services: 21 proxy + 10 direct) */
 export const protoServices: ServiceDef[] = [
   military,
   market,
@@ -50,6 +61,17 @@ export const protoServices: ServiceDef[] = [
   unrest,
   giving,
   positiveEvents,
+  // Direct-handler services
+  secEdgar,
+  treasury,
+  cftc,
+  congress,
+  economicCalendar,
+  weatherAgriculture,
+  government,
+  onchain,
+  sentiment,
+  article,
 ];
 
 /** Legacy (non-proto) endpoints */

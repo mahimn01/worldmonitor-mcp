@@ -16,6 +16,7 @@ import { WorldMonitorClient } from './client.js';
 import { formatOutput } from './output.js';
 import { allServices, allTools } from './services/index.js';
 import { OutputFormat, ServiceDef, ToolDef } from './types.js';
+import { directHandlers } from './handlers/index.js';
 
 // ---------------------------------------------------------------------------
 // Handle special flags BEFORE commander parses (they don't need subcommands)
@@ -175,6 +176,28 @@ function buildProgram(): Command {
           }
         }
 
+        // Check for direct handler first (external API calls)
+        const handler = directHandlers[capturedTool.name];
+        if (handler) {
+          try {
+            const data = await handler(params);
+            console.log(
+              format === 'json'
+                ? JSON.stringify(data)
+                : JSON.stringify(data, null, 2),
+            );
+          } catch (err: unknown) {
+            const message =
+              err instanceof Error ? err.message : 'Unknown error';
+            console.error(
+              JSON.stringify({ error: true, message }, null, 2),
+            );
+            process.exit(1);
+          }
+          return;
+        }
+
+        // Proxy through WorldMonitorClient
         const fullPath = capturedService.basePath + capturedTool.endpoint;
         const result = await client.call(
           fullPath,

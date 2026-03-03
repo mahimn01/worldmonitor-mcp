@@ -78,3 +78,15 @@ export interface ApiError {
 // ---------------------------------------------------------------------------
 
 export type OutputFormat = 'json' | 'json-pretty' | 'raw';
+
+// ---------------------------------------------------------------------------
+// Direct handler type (for tools that call external APIs directly)
+// ---------------------------------------------------------------------------
+
+/**
+ * A direct handler function takes validated params and returns the result
+ * directly, bypassing the WorldMonitorClient proxy.
+ */
+export type DirectHandler = (
+  params: Record<string, unknown>,
+) => Promise<unknown>;
