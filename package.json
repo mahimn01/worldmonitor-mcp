@@ -1,7 +1,7 @@
 {
   "name": "worldmonitor-mcp",
   "version": "1.0.0",
-  "description": "MCP server + CLI for accessing World Monitor intelligence data. Provides 80+ tools covering military, financial, geopolitical, cyber, infrastructure, and environmental data sources.",
+  "description": "MCP server + CLI for accessing World Monitor intelligence data. Provides 107 tools across 32 services covering military, financial, geopolitical, cyber, infrastructure, environmental, and direct-API financial intelligence sources.",
   "type": "module",
   "bin": {
     "worldmonitor": "./bin/worldmonitor.js"
