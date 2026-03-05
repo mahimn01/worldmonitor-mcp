@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * World Monitor CLI — access 80+ intelligence data tools from the command line.
+ * World Monitor CLI — access 107 intelligence data tools from the command line.
  *
  * Usage:
  *   worldmonitor military flights --ne_lat=50 --sw_lat=40
@@ -175,6 +175,19 @@ function buildProgram(): Command {
                 params[key] = raw;
             }
           }
+        }
+
+        // Check for known-broken endpoints
+        const brokenEndpoints: Record<string, string> = {
+          get_shipping_rates: 'Endpoint unavailable (404). Try get_commodity_quotes instead.',
+          get_chokepoint_status: 'Endpoint unavailable (404). Try list_navigational_warnings instead.',
+          get_gps_jamming: 'Endpoint returning invalid data. Try search_gdelt_documents with "GPS jamming".',
+        };
+        const brokenMsg = brokenEndpoints[capturedTool.name];
+        if (brokenMsg) {
+          console.error(JSON.stringify({ error: true, message: brokenMsg }, null, 2));
+          process.exit(1);
+          return;
         }
 
         // Check for direct handler first (external API calls)

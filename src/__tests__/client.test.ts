@@ -110,9 +110,11 @@ describe('WorldMonitorClient', () => {
   });
 
   it('should handle HTTP error responses', async () => {
-    mockFetch.mockResolvedValueOnce(
-      new Response('Rate limit exceeded', { status: 429 }),
-    );
+    // Client retries 429s — provide enough mock responses for all attempts
+    mockFetch
+      .mockResolvedValueOnce(new Response('Rate limit exceeded', { status: 429 }))
+      .mockResolvedValueOnce(new Response('Rate limit exceeded', { status: 429 }))
+      .mockResolvedValueOnce(new Response('Rate limit exceeded', { status: 429 }));
 
     const client = new WorldMonitorClient(config);
     const result = await client.call('/api/test');
@@ -122,10 +124,30 @@ describe('WorldMonitorClient', () => {
     if (!result.ok) {
       expect((result as { message: string }).message).toBe('Rate limit exceeded');
     }
+    // Should have retried (1 initial + 2 retries = 3 total)
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('should handle non-retryable HTTP errors without retrying', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response('Not Found', { status: 404 }),
+    );
+
+    const client = new WorldMonitorClient(config);
+    const result = await client.call('/api/test');
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(404);
+    // 404 is not retryable — should only call fetch once
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
   it('should handle network errors', async () => {
-    mockFetch.mockRejectedValueOnce(new Error('Network error'));
+    // Client retries network errors — provide enough mock rejections
+    mockFetch
+      .mockRejectedValueOnce(new Error('Network error'))
+      .mockRejectedValueOnce(new Error('Network error'))
+      .mockRejectedValueOnce(new Error('Network error'));
 
     const client = new WorldMonitorClient(config);
     const result = await client.call('/api/test');
@@ -135,6 +157,22 @@ describe('WorldMonitorClient', () => {
     if (!result.ok) {
       expect((result as { message: string }).message).toBe('Network error');
     }
+  });
+
+  it('should recover on retry after transient failure', async () => {
+    // First attempt fails with 503, second succeeds
+    mockFetch
+      .mockResolvedValueOnce(new Response('Service Unavailable', { status: 503 }))
+      .mockResolvedValueOnce(jsonResponse({ recovered: true }));
+
+    const client = new WorldMonitorClient(config);
+    const result = await client.call('/api/test');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data).toEqual({ recovered: true });
+    }
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
   it('should handle text responses', async () => {
