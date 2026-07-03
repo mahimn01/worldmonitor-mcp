@@ -56,7 +56,18 @@ export interface ClientConfig {
   baseUrl: string;
   apiKey?: string;
   timeout: number;
+  /** Directory for the SQLite cache/state DB (default ~/.cache/worldmonitor) */
+  dataDir: string;
+  /** Watchlist symbols surfaced via the watchlist:// resource */
+  watchlist: string[];
+  /** Where the watchlist came from (for transparency in the resource) */
+  watchlistSource: 'env' | 'file' | 'default' | 'override';
+  /** Default TTL (seconds) for cached composite responses */
+  cacheTtlSeconds: number;
 }
+
+/** The subset of ClientConfig the HTTP client actually needs. */
+export type ClientConnection = Pick<ClientConfig, 'baseUrl' | 'apiKey' | 'timeout'>;
 
 export interface ApiResponse<T = unknown> {
   ok: boolean;
@@ -83,10 +94,34 @@ export type OutputFormat = 'json' | 'json-pretty' | 'raw';
 // Direct handler type (for tools that call external APIs directly)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Tool context (passed to handlers that compose other tools / use the store)
+// ---------------------------------------------------------------------------
+
+// Type-only imports — erased at compile time, so no runtime import cycle.
+import type { WorldMonitorClient } from './client.js';
+import type { Store } from './store.js';
+
+/**
+ * Shared context handed to direct handlers as an optional second argument.
+ * Legacy handlers ignore it; composite handlers use it to invoke other tools
+ * (proxy or direct) and to read/write the cache + snapshot store.
+ */
+export interface ToolContext {
+  client: WorldMonitorClient;
+  store: Store;
+  /** The resolved config this context was built with (watchlist, TTLs, …). */
+  config?: ClientConfig;
+  /** Invoke any registered tool by name (direct or proxied); returns unwrapped data. */
+  callTool(name: string, params?: Record<string, unknown>): Promise<unknown>;
+}
+
 /**
  * A direct handler function takes validated params and returns the result
- * directly, bypassing the WorldMonitorClient proxy.
+ * directly, bypassing the WorldMonitorClient proxy. The optional `ctx` second
+ * argument is provided by the MCP server for composite/stateful handlers.
  */
 export type DirectHandler = (
   params: Record<string, unknown>,
+  ctx?: ToolContext,
 ) => Promise<unknown>;

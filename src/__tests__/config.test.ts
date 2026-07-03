@@ -46,4 +46,26 @@ describe('loadConfig', () => {
     expect(config.baseUrl).toBe('https://worldmonitor.app');
     expect(config.timeout).toBe(1000);
   });
+
+  it('should default dataDir and cacheTtlSeconds', () => {
+    delete process.env.WORLDMONITOR_DATA_DIR;
+    delete process.env.WORLDMONITOR_CACHE_TTL;
+    const config = loadConfig();
+    expect(config.dataDir).toMatch(/[\\/]\.cache[\\/]worldmonitor$/);
+    expect(config.cacheTtlSeconds).toBe(900);
+  });
+
+  it('should resolve watchlist from env (precedence over file/default)', () => {
+    process.env.WORLDMONITOR_WATCHLIST = 'nvda, amzn ,tsla';
+    const config = loadConfig({ dataDir: '/nonexistent-dir-xyz' });
+    expect(config.watchlist).toEqual(['NVDA', 'AMZN', 'TSLA']);
+    expect(config.watchlistSource).toBe('env');
+  });
+
+  it('should fall back to the default watchlist', () => {
+    delete process.env.WORLDMONITOR_WATCHLIST;
+    const config = loadConfig({ dataDir: '/nonexistent-dir-xyz' });
+    expect(config.watchlist).toEqual(['SPY', 'QQQ', '^VIX']);
+    expect(config.watchlistSource).toBe('default');
+  });
 });

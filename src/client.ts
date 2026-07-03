@@ -10,7 +10,7 @@
  * - Configurable timeout
  */
 
-import { ClientConfig, ApiResponse, ApiError } from './types.js';
+import { ClientConnection, ApiResponse, ApiError } from './types.js';
 
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 const MAX_RETRIES = 2;
@@ -25,9 +25,9 @@ function delay(ms: number): Promise<void> {
 }
 
 export class WorldMonitorClient {
-  private config: ClientConfig;
+  private config: ClientConnection;
 
-  constructor(config: ClientConfig) {
+  constructor(config: ClientConnection) {
     this.config = config;
   }
 
@@ -42,7 +42,10 @@ export class WorldMonitorClient {
     path: string,
     params?: Record<string, unknown>,
     method: 'GET' | 'POST' = 'GET',
+    opts?: { retries?: number },
   ): Promise<ApiResponse<T> | ApiError> {
+    // Composite fan-out passes retries:0 so fused tools don't amplify load.
+    const maxRetries = opts?.retries ?? MAX_RETRIES;
     const url = new URL(path, this.config.baseUrl);
 
     const headers: Record<string, string> = {
@@ -72,7 +75,7 @@ export class WorldMonitorClient {
 
     let lastError: ApiError | undefined;
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
       if (attempt > 0) {
         const backoff = BASE_DELAY_MS * Math.pow(2, attempt - 1);
         await delay(backoff);
@@ -107,7 +110,7 @@ export class WorldMonitorClient {
           const text = await response.text().catch(() => '');
 
           // Retry on transient failures
-          if (isRetryable(response.status) && attempt < MAX_RETRIES) {
+          if (isRetryable(response.status) && attempt < maxRetries) {
             lastError = {
               ok: false,
               status: response.status,
@@ -167,7 +170,7 @@ export class WorldMonitorClient {
           err instanceof Error ? err.message : 'Unknown error';
 
         // Retry on network errors (timeout, ECONNRESET, etc.)
-        if (attempt < MAX_RETRIES) {
+        if (attempt < maxRetries) {
           lastError = { ok: false, status: 0, message, elapsed };
           continue;
         }
