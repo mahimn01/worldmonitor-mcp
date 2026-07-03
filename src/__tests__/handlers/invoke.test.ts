@@ -61,12 +61,11 @@ describe('cachedInvoke', () => {
     expect(calls).toBe(1);
   });
 
-  it('usable predicate rejects fallback payloads without poisoning the cache', async () => {
+  it('usable predicate rejects fallback payloads: never cached as SUCCESS, negative-cached as failure', async () => {
     let calls = 0;
-    let payload: Record<string, unknown> = { message: 'unavailable' };
     const ctx = makeCtx(async () => {
       calls++;
-      return payload;
+      return { message: 'unavailable' };
     });
     const usable = (d: { summary?: string }) => !!d.summary;
 
@@ -75,14 +74,14 @@ describe('cachedInvoke', () => {
     expect(bad.cached).toBeUndefined();
     expect(bad.error).toMatch(/no usable data/);
 
-    // The unusable result was NOT cached — the retry reaches the stub and
-    // returns the now-good payload.
-    payload = { summary: 'recovered' };
-    const good = await cachedInvoke(ctx, 'feed_usable', {}, 60, { usable });
-    expect(good.ok).toBe(true);
-    expect(good.cached).toBeUndefined();
-    expect(good.data).toEqual({ summary: 'recovered' });
-    expect(calls).toBe(2);
+    // The failure is NEGATIVE-cached (short TTL): an immediate retry is served
+    // as a cached FAILURE — the fallback payload is never promoted to cached
+    // data, and the dead upstream isn't hammered on every composite call.
+    const retry = await cachedInvoke(ctx, 'feed_usable', {}, 60, { usable });
+    expect(retry.ok).toBe(false);
+    expect(retry.cached).toBe(true);
+    expect(retry.data).toBeUndefined(); // never served as data
+    expect(calls).toBe(1); // upstream hit exactly once
   });
 
   it('coalesces identical in-flight calls onto one upstream fetch', async () => {

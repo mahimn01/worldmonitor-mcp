@@ -40,8 +40,15 @@ const nowSec = () => Math.floor(Date.now() / 1000);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
 
-function coverageOf(feeds: FeedResult[]): Array<{ name: string; ok: boolean; error?: string }> {
-  return feeds.map((f) => ({ name: f.name, ok: f.ok, ...(f.error ? { error: f.error } : {}) }));
+function coverageOf(
+  feeds: FeedResult[],
+): Array<{ name: string; ok: boolean; error?: string; cached?: boolean }> {
+  return feeds.map((f) => ({
+    name: f.name,
+    ok: f.ok,
+    ...(f.error ? { error: f.error } : {}),
+    ...(f.cached ? { cached: true } : {}),
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -143,7 +150,7 @@ const USABLE = {
 
 const getTickerIntel: DirectHandler = async (params, ctxArg) => {
   const ctx = ensureContext(ctxArg);
-  const symbol = String(params.symbol ?? '').toUpperCase();
+  const symbol = String(params.symbol ?? '').trim().toUpperCase();
   if (!symbol) return { error: true, message: 'symbol is required' };
   const full = params.verbosity === 'full';
 
@@ -419,7 +426,15 @@ const POSTURE_INTENSITY: Record<string, number> = {
 
 const getEnergyRisk: DirectHandler = async (params, ctxArg) => {
   const ctx = ensureContext(ctxArg);
-  const commodity = (params.commodity as string) || 'all';
+  const commodity = String(params.commodity ?? 'all');
+  // The MCP layer enforces the enum via zod, but the CLI path does not —
+  // an unknown commodity must not silently run the oil path.
+  if (!['oil', 'natgas', 'all'].includes(commodity)) {
+    return {
+      error: true,
+      message: `Unknown commodity '${commodity}'. Valid: oil | natgas | all.`,
+    };
+  }
   const full = params.verbosity === 'full';
   const gdeltQuery =
     commodity === 'natgas' ? 'natural gas Europe supply' : 'Iran Strait of Hormuz oil tanker';
@@ -646,8 +661,18 @@ export function recordFeed(ctx: ToolContext, specKey: string, storeFeed: string,
   }
 }
 
-function resolveSince(since: unknown, now: number): number {
-  if (typeof since === 'number') return since > 1e11 ? Math.floor(since / 1000) : since;
+/**
+ * Parse the `since` param. Returns null when a value WAS provided but could
+ * not be parsed — silently substituting the 24h default for garbage like
+ * "-5d" would hand a trader a mislabeled diff window.
+ */
+function resolveSince(since: unknown, now: number): number | null {
+  if (since === undefined || since === null || since === '') {
+    return now - 86400; // default: last 24h
+  }
+  if (typeof since === 'number' && Number.isFinite(since) && since >= 0) {
+    return since > 1e11 ? Math.floor(since / 1000) : since;
+  }
   if (typeof since === 'string') {
     const dur = since.match(/^(\d+)\s*([mhd])$/i);
     if (dur) {
@@ -664,7 +689,7 @@ function resolveSince(since: unknown, now: number): number {
     const t = Date.parse(since);
     if (!Number.isNaN(t)) return Math.floor(t / 1000);
   }
-  return now - 86400; // default: last 24h
+  return null; // provided but unparseable
 }
 
 const getChangesSince: DirectHandler = async (params, ctxArg) => {
@@ -691,6 +716,12 @@ const getChangesSince: DirectHandler = async (params, ctxArg) => {
 
   const now = nowSec();
   const since = resolveSince(params.since, now);
+  if (since === null) {
+    return {
+      error: true,
+      message: `Could not parse since='${String(params.since)}'. Use an ISO date, unix timestamp, or a duration like "24h"/"7d"/"30m".`,
+    };
+  }
 
   // Fetch current state and fold it into the snapshot store.
   const fetched = await settle<Any>(ctx, spec.tool, spec.passthrough ? spec.passthrough(params) : {});

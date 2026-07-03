@@ -121,13 +121,20 @@ function rawXmlUrl(documentUrl: string): string {
 
 export const getInsiderActivity: DirectHandler = async (params, ctxArg) => {
   const ctx: ToolContext = ensureContext(ctxArg);
-  const windowDays = (params.window_days as number) || 90;
+  // Explicit finite-number validation — `|| default` would silently turn an
+  // explicit 0 (or garbage) into the default instead of clamping/erroring.
+  const wdRaw = Number(params.window_days);
+  const windowDays =
+    params.window_days === undefined || !Number.isFinite(wdRaw)
+      ? 90
+      : Math.max(1, Math.floor(wdRaw));
+  const limRaw = Number(params.limit);
   // Clamp to [1, MAX_FILINGS] — a negative limit would bypass the cap via
   // Math.min and then slice(0, -1) most of the listing back in.
-  const limit = Math.min(
-    Math.max(1, Math.floor(Number(params.limit) || 15)),
-    MAX_FILINGS,
-  );
+  const limit =
+    params.limit === undefined || !Number.isFinite(limRaw)
+      ? 15
+      : Math.min(Math.max(1, Math.floor(limRaw)), MAX_FILINGS);
   const symbol = params.symbol ? String(params.symbol).toUpperCase() : undefined;
 
   // Resolve CIK (param wins; else from symbol). A resolver FAILURE is reported

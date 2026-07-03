@@ -75,13 +75,17 @@ export function makeFactor(
   weight: number,
 ): Factor {
   const i = clamp(intensity, 0, 1);
+  // Contribution is derived from the ROUNDED intensity so the displayed
+  // fields are internally consistent (weight × intensity == contribution
+  // when recomputed from the output itself).
+  const rounded = Math.round(i * 100) / 100;
   return {
     key,
     label,
     signal: clamp(signal),
-    intensity: Math.round(i * 100) / 100,
+    intensity: rounded,
     weight,
-    contribution: Math.round(weight * i * 100) / 100,
+    contribution: Math.round(weight * rounded * 100) / 100,
   };
 }
 

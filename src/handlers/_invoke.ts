@@ -102,6 +102,14 @@ export interface CachedInvokeOpts<T> {
 // before the first response lands in the cache).
 const inFlight = new Map<string, Promise<FeedResult<unknown>>>();
 
+/**
+ * Failed/unusable feed results are NEVER cached as data, but they ARE
+ * negative-cached briefly so repeated composite calls don't hammer a dead or
+ * rate-limited upstream on every invocation. The cached failure is served as
+ * ok:false with cached:true — honest, short-lived, and self-healing.
+ */
+const NEGATIVE_TTL_SECONDS = 45;
+
 /** settle() with a TTL cache + usability check layered on top via ctx.store. */
 export async function cachedInvoke<T = unknown>(
   ctx: ToolContext,
@@ -111,9 +119,19 @@ export async function cachedInvoke<T = unknown>(
   opts: CachedInvokeOpts<T> = {},
 ): Promise<FeedResult<T>> {
   const key = `feed:${name}:${stableKey(params)}`;
+  const negKey = `feedfail:${name}:${stableKey(params)}`;
   try {
     const hit = ctx.store.cacheGet(key);
     if (hit) return { name, ok: true, data: hit.value as T, cached: true };
+    const neg = ctx.store.cacheGet(negKey);
+    if (neg) {
+      return {
+        name,
+        ok: false,
+        error: String((neg.value as { error?: unknown })?.error ?? 'recent feed failure'),
+        cached: true,
+      };
+    }
   } catch {
     // Store is best-effort — a broken store must not fail the feed.
   }
@@ -123,21 +141,24 @@ export async function cachedInvoke<T = unknown>(
 
   const run = (async (): Promise<FeedResult<T>> => {
     const res = await settle<T>(ctx, name, params);
+    let out: FeedResult<T> = res;
     if (res.ok && opts.usable && !opts.usable(res.data as T)) {
-      return {
+      out = {
         name,
         ok: false,
         error: 'feed returned no usable data (fallback/unavailable payload)',
       };
     }
-    if (res.ok) {
-      try {
-        ctx.store.cacheSet(key, res.data, ttlSeconds);
-      } catch {
-        // best-effort
+    try {
+      if (out.ok) {
+        ctx.store.cacheSet(key, out.data, ttlSeconds);
+      } else {
+        ctx.store.cacheSet(negKey, { error: out.error }, NEGATIVE_TTL_SECONDS);
       }
+    } catch {
+      // best-effort
     }
-    return res;
+    return out;
   })();
 
   inFlight.set(key, run as Promise<FeedResult<unknown>>);

@@ -17,7 +17,12 @@ const factor = z.object({
 });
 
 const coverage = z.array(
-  z.object({ name: z.string(), ok: z.boolean(), error: z.string().optional() }),
+  z.object({
+    name: z.string(),
+    ok: z.boolean(),
+    error: z.string().optional(),
+    cached: z.boolean().optional(),
+  }),
 );
 
 export const tickerIntelShape = {

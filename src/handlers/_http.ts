@@ -93,29 +93,32 @@ function httpsRequest(
  * Internal fetch wrapper that applies common options.
  * Uses native fetch for most requests, falls back to node:https
  * for TLS-permissive requests (government APIs with cert issues).
+ *
+ * The FULL response body is read INSIDE the timeout window — clearing the
+ * timer at header-arrival left slow body drains (e.g. throttled upstreams)
+ * unguarded, producing multi-x latency spikes past the configured timeout.
  */
 async function _fetch(
   url: string,
   opts: FetchOptions & { accept?: string },
-): Promise<{ ok: boolean; status: number; statusText: string; text: () => Promise<string>; json: () => Promise<unknown> }> {
-  // For tlsPermissive, use node:https directly
+): Promise<{ ok: boolean; status: number; statusText: string; bodyText: string }> {
+  // For tlsPermissive, use node:https directly (already reads the full body
+  // under its own socket timeout).
   if (opts.tlsPermissive) {
     const mergedHeaders = {
       ...(opts.accept ? { Accept: opts.accept } : {}),
       ...opts.headers,
     };
     const result = await httpsRequest(url, { ...opts, headers: mergedHeaders });
-    const ok = result.status >= 200 && result.status < 300;
     return {
-      ok,
+      ok: result.status >= 200 && result.status < 300,
       status: result.status,
       statusText: result.statusText,
-      text: async () => result.body,
-      json: async () => JSON.parse(result.body),
+      bodyText: result.body,
     };
   }
 
-  // Standard fetch path
+  // Standard fetch path — abort covers headers AND body.
   const controller = new AbortController();
   const timeoutId = setTimeout(
     () => controller.abort(),
@@ -132,8 +135,13 @@ async function _fetch(
       body: opts.body,
       signal: controller.signal,
     });
-
-    return response;
+    const bodyText = await response.text();
+    return {
+      ok: response.ok,
+      status: response.status,
+      statusText: response.statusText,
+      bodyText,
+    };
   } finally {
     clearTimeout(timeoutId);
   }
@@ -149,13 +157,12 @@ export async function fetchJson<T = unknown>(
   const response = await _fetch(url, { ...opts, accept: 'application/json' });
 
   if (!response.ok) {
-    const text = await response.text().catch(() => '');
     throw new Error(
-      `HTTP ${response.status}: ${text.slice(0, 200) || response.statusText}`,
+      `HTTP ${response.status}: ${response.bodyText.slice(0, 200) || response.statusText}`,
     );
   }
 
-  return (await response.json()) as T;
+  return JSON.parse(response.bodyText) as T;
 }
 
 /**
@@ -171,5 +178,5 @@ export async function fetchText(
     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
   }
 
-  return await response.text();
+  return response.bodyText;
 }

@@ -10,8 +10,16 @@
  *   worldmonitor --mcp   (starts MCP server over stdio)
  */
 
-import 'dotenv/config';
+import { config as loadDotenv } from 'dotenv';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
+
+// Load .env from cwd AND (as fallback) the package dir; quiet so the banner
+// never pollutes stdout (scripts parse the CLI's JSON output). Never
+// overrides variables that are already set.
+loadDotenv({ quiet: true });
+loadDotenv({ path: join(dirname(fileURLToPath(import.meta.url)), '..', '.env'), quiet: true });
 import { loadConfig } from './config.js';
 import { WorldMonitorClient } from './client.js';
 import { formatOutput } from './output.js';
@@ -20,6 +28,7 @@ import { OutputFormat, ServiceDef, ToolDef } from './types.js';
 import { directHandlers } from './handlers/index.js';
 import { createContext } from './handlers/_invoke.js';
 import { KNOWN_BROKEN } from './known-broken.js';
+import { OUTPUT_SCHEMAS } from './schemas.js';
 
 // ---------------------------------------------------------------------------
 // Handle special flags BEFORE commander parses (they don't need subcommands)
@@ -205,6 +214,22 @@ function buildProgram(): Command {
                 ? JSON.stringify(data)
                 : JSON.stringify(data, null, 2),
             );
+            // Composite tools that return {error:true} payloads exit non-zero
+            // so shell scripts gating on exit code don't treat them as success
+            // (legacy informational {error:...} fallbacks keep exit 0).
+            const isCompositeError =
+              OUTPUT_SCHEMAS[capturedTool.name] !== undefined &&
+              data !== null &&
+              typeof data === 'object' &&
+              (data as { error?: unknown }).error === true;
+            if (isCompositeError) {
+              try {
+                ctx.store.close();
+              } catch {
+                /* best-effort */
+              }
+              process.exit(1);
+            }
           } catch (err: unknown) {
             const message =
               err instanceof Error ? err.message : 'Unknown error';

@@ -14,10 +14,21 @@
  *   worldmonitor --mcp                (from CLI)
  */
 
-import 'dotenv/config';
+import { config as loadDotenv } from 'dotenv';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+
+// Load .env from cwd AND (as fallback) the package dir — MCP clients spawn
+// from arbitrary directories. quiet:true is REQUIRED: dotenv's banner prints
+// to stdout, which carries the JSON-RPC frames. Never overrides set vars.
+loadDotenv({ quiet: true });
+loadDotenv({
+  path: join(dirname(fileURLToPath(import.meta.url)), '..', '.env'),
+  quiet: true,
+});
 import { loadConfig, envInt } from './config.js';
 import { allServices } from './services/index.js';
 import { ClientConfig, ParamDef, ApiError, ApiResponse } from './types.js';
@@ -173,6 +184,16 @@ export async function startMcpServer(
               error: true,
               status: 'endpoint_unavailable',
               message: broken,
+            });
+          }
+          // Entry-size guard: oversized args would be echoed back through
+          // composite outputs (symbol fields etc.), bypassing the response
+          // cap via structuredContent. No legitimate call needs >8KB of args.
+          const argsJson = compactJson(args ?? {});
+          if (argsJson.length > 8_192) {
+            return errorResult({
+              error: true,
+              message: `Arguments too large (${argsJson.length} chars, limit 8192).`,
             });
           }
           const params = buildParams(args, tool.params);
