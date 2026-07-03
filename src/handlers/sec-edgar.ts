@@ -4,12 +4,11 @@
  */
 
 import { DirectHandler } from '../types.js';
-import { fetchJson } from './_http.js';
+import { secFetchJson } from './_sec.js';
+import { getInsiderActivity } from './_form4.js';
 
 const SEC_EFTS = 'https://efts.sec.gov/LATEST';
 const SEC_DATA = 'https://data.sec.gov';
-const SEC_UA = 'worldmonitor-mcp/1.0 (worldmonitor@example.com)';
-const SEC_HEADERS = { 'User-Agent': SEC_UA };
 
 function padCik(cik: string): string {
   return cik.replace(/^0*/, '').padStart(10, '0');
@@ -40,16 +39,15 @@ const searchSecFilings: DirectHandler = async (params) => {
   if (params.start_date) url.searchParams.set('startdt', params.start_date as string);
   if (params.end_date) url.searchParams.set('enddt', params.end_date as string);
   if (params.from) url.searchParams.set('from', String(params.from));
-  return fetchJson(url.toString(), { headers: SEC_HEADERS });
+  return secFetchJson(url.toString());
 };
 
 const getInsiderTransactions: DirectHandler = async (params) => {
   const cik = padCik(params.cik as string);
   const limit = (params.limit as number) || 20;
 
-  const data = await fetchJson<SecSubmissions>(
+  const data = await secFetchJson<SecSubmissions>(
     `${SEC_DATA}/submissions/CIK${cik}.json`,
-    { headers: SEC_HEADERS },
   );
 
   const recent = data.filings.recent;
@@ -79,9 +77,8 @@ const getInstitutionalHoldings: DirectHandler = async (params) => {
   const cik = padCik(params.cik as string);
   const limit = (params.limit as number) || 50;
 
-  const data = await fetchJson<SecSubmissions>(
+  const data = await secFetchJson<SecSubmissions>(
     `${SEC_DATA}/submissions/CIK${cik}.json`,
-    { headers: SEC_HEADERS },
   );
 
   const recent = data.filings.recent;
@@ -111,9 +108,8 @@ const getCompanyFilings: DirectHandler = async (params) => {
   const limit = (params.limit as number) || 20;
   const typeFilter = params.type as string | undefined;
 
-  const data = await fetchJson<SecSubmissions>(
+  const data = await secFetchJson<SecSubmissions>(
     `${SEC_DATA}/submissions/CIK${cik}.json`,
-    { headers: SEC_HEADERS },
   );
 
   const recent = data.filings.recent;
@@ -142,9 +138,8 @@ const getCompanyFacts: DirectHandler = async (params) => {
   const cik = padCik(params.cik as string);
   const fact = params.fact as string | undefined;
 
-  const data = await fetchJson<Record<string, unknown>>(
+  const data = await secFetchJson<Record<string, unknown>>(
     `${SEC_DATA}/api/xbrl/companyfacts/CIK${cik}.json`,
-    { headers: SEC_HEADERS },
   );
 
   if (fact) {
@@ -159,6 +154,7 @@ const getCompanyFacts: DirectHandler = async (params) => {
 export const secEdgarHandlers: Record<string, DirectHandler> = {
   search_sec_filings: searchSecFilings,
   get_insider_transactions: getInsiderTransactions,
+  get_insider_activity: getInsiderActivity,
   get_institutional_holdings: getInstitutionalHoldings,
   get_company_filings: getCompanyFilings,
   get_company_facts: getCompanyFacts,

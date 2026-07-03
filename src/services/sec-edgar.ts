@@ -56,6 +56,33 @@ export const secEdgar: ServiceDef = {
       endpoint: '/get-insider-transactions',
     },
     {
+      name: 'get_insider_activity',
+      description:
+        'REAL insider buy/sell signal — fetches and parses recent Form 4 XML to ' +
+        'extract actual open-market purchases (P) vs sales (S), share counts, and $ value. ' +
+        'Accepts a ticker symbol (auto-resolves CIK) or a cik. Unlike get_insider_transactions ' +
+        '(which only lists that filings exist), this distinguishes direction. Informational, not advice.',
+      params: {
+        symbol: {
+          type: 'string',
+          description: 'Ticker symbol (e.g. "AAPL"); auto-resolves to CIK',
+        },
+        cik: {
+          type: 'string',
+          description: 'SEC CIK number (alternative to symbol)',
+        },
+        window_days: {
+          type: 'number',
+          description: 'Lookback window in days (default 90)',
+        },
+        limit: {
+          type: 'number',
+          description: 'Max Form 4 filings to fetch+parse (default 15, hard cap 25 for SEC rate limits)',
+        },
+      },
+      endpoint: '/get-insider-activity',
+    },
+    {
       name: 'get_institutional_holdings',
       description:
         'Get institutional holdings from 13F filings. Shows which funds hold the stock and when filings were made.',
