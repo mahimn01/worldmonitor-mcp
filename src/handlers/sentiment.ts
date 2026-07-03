@@ -57,6 +57,9 @@ const getSocialSentiment: DirectHandler = async (params) => {
       symbol,
       source: `r/${subreddit}`,
       period: 'past_week',
+      metric: 'buzz_volume',
+      note: 'Engagement/volume only — this is NOT directional sentiment polarity. ' +
+        'avg_upvote_ratio is a weak crowd-agreement proxy, not a bull/bear signal.',
       summary: {
         post_count: posts.length,
         total_score: totalScore,
@@ -115,6 +118,8 @@ const getFearGreedDetail: DirectHandler = async (params) => {
     : avg7d;
 
   return {
+    market: 'crypto',
+    index: 'Crypto Fear & Greed Index (alternative.me) — NOT the equity/CNN index',
     current: {
       value: latest,
       classification: data.data[0].value_classification,
@@ -138,6 +143,19 @@ interface CboeOption {
   delta: number;
 }
 
+/**
+ * Classify an OCC option symbol as a call or put.
+ * OCC format is fixed-width at the tail: [root][YYMMDD][C|P][strike×8].
+ * The right type flag is therefore always at index length-9, regardless of the
+ * root — so we read that position instead of `includes('C'|'P')`, which
+ * mis-classifies any underlying whose root contains a C or P (CRM, PYPL, PLTR…).
+ */
+export function occRight(option: string | undefined): 'C' | 'P' | null {
+  if (!option || option.length < 9) return null;
+  const flag = option[option.length - 9];
+  return flag === 'C' ? 'C' : flag === 'P' ? 'P' : null;
+}
+
 const getOptionsFlow: DirectHandler = async (params) => {
   const symbol = ((params.symbol as string | undefined) ?? 'SPY').toUpperCase();
 
@@ -149,15 +167,18 @@ const getOptionsFlow: DirectHandler = async (params) => {
     }>(`https://cdn.cboe.com/api/global/delayed_quotes/options/${encodeURIComponent(symbol)}.json`);
 
     const options = data.data?.options || [];
-    const calls = options.filter((o) => o.option?.includes('C'));
-    const puts = options.filter((o) => o.option?.includes('P'));
+    const calls = options.filter((o) => occRight(o.option) === 'C');
+    const puts = options.filter((o) => occRight(o.option) === 'P');
 
     const callVolume = calls.reduce((s, o) => s + (o.volume || 0), 0);
     const putVolume = puts.reduce((s, o) => s + (o.volume || 0), 0);
     const callOI = calls.reduce((s, o) => s + (o.open_interest || 0), 0);
     const putOI = puts.reduce((s, o) => s + (o.open_interest || 0), 0);
-    const pcRatioVol = callVolume > 0 ? Math.round((putVolume / callVolume) * 1000) / 1000 : 0;
-    const pcRatioOI = callOI > 0 ? Math.round((putOI / callOI) * 1000) / 1000 : 0;
+    // A zero-call chain has an UNDEFINED ratio, not 0 — 0 would read as
+    // maximally bullish when the flow is actually all puts (max bearish).
+    const pcRatioVol =
+      callVolume > 0 ? Math.round((putVolume / callVolume) * 1000) / 1000 : null;
+    const pcRatioOI = callOI > 0 ? Math.round((putOI / callOI) * 1000) / 1000 : null;
 
     // Top contracts by volume
     const topByVolume = [...options]
@@ -174,7 +195,9 @@ const getOptionsFlow: DirectHandler = async (params) => {
 
     // Sentiment interpretation
     let sentiment: string;
-    if (pcRatioVol > 1.5) sentiment = 'very_bearish';
+    if (callVolume === 0 && putVolume === 0) sentiment = 'no_volume';
+    else if (pcRatioVol === null) sentiment = 'very_bearish'; // all-put flow
+    else if (pcRatioVol > 1.5) sentiment = 'very_bearish';
     else if (pcRatioVol > 1.0) sentiment = 'bearish';
     else if (pcRatioVol > 0.7) sentiment = 'neutral';
     else if (pcRatioVol > 0.5) sentiment = 'bullish';
