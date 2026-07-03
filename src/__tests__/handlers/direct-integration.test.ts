@@ -20,6 +20,7 @@ const DIRECT_SERVICES = [
   'onchain',
   'sentiment',
   'article',
+  'trading',
 ];
 
 describe('Direct Handler Registry', () => {
@@ -27,8 +28,9 @@ describe('Direct Handler Registry', () => {
     expect(Object.keys(directHandlers).length).toBeGreaterThan(0);
   });
 
-  it('should have exactly 30 handlers registered', () => {
-    expect(Object.keys(directHandlers).length).toBe(30);
+  it('should have exactly 35 handlers registered', () => {
+    // 30 original + get_insider_activity + 4 trading composites
+    expect(Object.keys(directHandlers).length).toBe(35);
   });
 
   it('every handler should be a function', () => {

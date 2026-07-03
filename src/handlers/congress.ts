@@ -21,6 +21,8 @@ interface ParsedTrade {
   chamber: string;
   state: string;
   issuer: string;
+  /** Ticker extracted from the issuer cell's trailing "TICKER:US" tag */
+  ticker: string | null;
   published: string;
   traded: string;
   filed_after: string;
@@ -30,10 +32,16 @@ interface ParsedTrade {
   price: string;
 }
 
+/** Capitol Trades issuer cells end with the listing tag, e.g. "NVIDIA Corp NVDA:US". */
+export function extractTicker(issuer: string): string | null {
+  const m = issuer.match(/\b([A-Z][A-Z.\-]{0,6}):US\b/);
+  return m ? m[1] : null;
+}
+
 /**
  * Parse trade rows from Capitol Trades HTML table.
  */
-function parseTradesTable(html: string): ParsedTrade[] {
+export function parseTradesTable(html: string): ParsedTrade[] {
   const trades: ParsedTrade[] = [];
 
   // Extract table body rows
@@ -70,6 +78,7 @@ function parseTradesTable(html: string): ParsedTrade[] {
       chamber: chamberMatch?.[1] || '',
       state: stateMatch?.[1] || '',
       issuer: cellTexts[1] || '',
+      ticker: extractTicker(cellTexts[1] || ''),
       published: cellTexts[2] || '',
       traded: cellTexts[3] || '',
       filed_after: cellTexts[4] || '',

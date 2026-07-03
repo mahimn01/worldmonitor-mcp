@@ -36,9 +36,10 @@ import { government } from './government.js';
 import { onchain } from './onchain.js';
 import { sentiment } from './sentiment.js';
 import { article } from './article.js';
+import { trading } from './trading.js';
 import { legacy } from './legacy.js';
 
-/** All proto-first services (31 services: 21 proxy + 10 direct) */
+/** All proto-first services (32 services: 21 proxy + 11 direct) */
 export const protoServices: ServiceDef[] = [
   military,
   market,
@@ -72,6 +73,8 @@ export const protoServices: ServiceDef[] = [
   onchain,
   sentiment,
   article,
+  // Composite trading-intelligence service (direct handlers; fuses other tools)
+  trading,
 ];
 
 /** Legacy (non-proto) endpoints */

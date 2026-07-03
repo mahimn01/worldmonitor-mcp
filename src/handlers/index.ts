@@ -15,6 +15,7 @@ import { governmentHandlers } from './government.js';
 import { onchainHandlers } from './onchain.js';
 import { sentimentHandlers } from './sentiment.js';
 import { articleHandlers } from './article.js';
+import { tradingHandlers } from './trading.js';
 
 export const directHandlers: Record<string, DirectHandler> = {
   ...secEdgarHandlers,
@@ -27,4 +28,5 @@ export const directHandlers: Record<string, DirectHandler> = {
   ...onchainHandlers,
   ...sentimentHandlers,
   ...articleHandlers,
+  ...tradingHandlers,
 };

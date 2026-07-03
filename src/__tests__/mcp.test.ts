@@ -169,6 +169,7 @@ describe('MCP Tool Coverage', () => {
     // SEC EDGAR (direct)
     'search_sec_filings',
     'get_insider_transactions',
+    'get_insider_activity',
     'get_institutional_holdings',
     'get_company_filings',
     'get_company_facts',
@@ -206,6 +207,11 @@ describe('MCP Tool Coverage', () => {
     // Article (direct)
     'extract_article',
     'search_and_extract',
+    // Trading composites (direct)
+    'get_ticker_intel',
+    'scan_convergence',
+    'get_energy_risk',
+    'get_changes_since',
   ];
 
   for (const toolName of expectedTools) {

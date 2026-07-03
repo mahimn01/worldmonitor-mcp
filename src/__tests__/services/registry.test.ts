@@ -13,10 +13,10 @@ import {
 } from '../../services/index.js';
 
 describe('Service Registry', () => {
-  it('should have all 32 services registered', () => {
-    // 31 proto (21 proxy + 10 direct) + 1 legacy
-    expect(allServices.length).toBe(32);
-    expect(protoServices.length).toBe(31);
+  it('should have all 33 services registered', () => {
+    // 32 proto (21 proxy + 11 direct, incl. trading) + 1 legacy
+    expect(allServices.length).toBe(33);
+    expect(protoServices.length).toBe(32);
     expect(legacyServices.length).toBe(1);
   });
 
@@ -148,6 +148,7 @@ describe('Proto Services', () => {
     'onchain',
     'sentiment',
     'article',
+    'trading',
   ];
 
   for (const name of expectedServices) {
@@ -184,7 +185,7 @@ describe('Service Tool Counts', () => {
     'positive-events': 1,
     legacy: 12,
     // Direct-handler services
-    'sec-edgar': 5,
+    'sec-edgar': 6,
     treasury: 3,
     cftc: 2,
     congress: 2,
@@ -194,6 +195,7 @@ describe('Service Tool Counts', () => {
     onchain: 4,
     sentiment: 3,
     article: 2,
+    trading: 4,
   };
 
   for (const [name, minCount] of Object.entries(expectedMinTools)) {
