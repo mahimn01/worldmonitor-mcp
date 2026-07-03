@@ -18,6 +18,8 @@ import { formatOutput } from './output.js';
 import { allServices, allTools } from './services/index.js';
 import { OutputFormat, ServiceDef, ToolDef } from './types.js';
 import { directHandlers } from './handlers/index.js';
+import { createContext } from './handlers/_invoke.js';
+import { KNOWN_BROKEN } from './known-broken.js';
 
 // ---------------------------------------------------------------------------
 // Handle special flags BEFORE commander parses (they don't need subcommands)
@@ -103,13 +105,18 @@ function buildProgram(): Command {
       'CLI + MCP server for accessing World Monitor intelligence data — military, financial, geopolitical, cyber, infrastructure, and environmental sources.',
     )
     .version('1.0.0')
+    // No commander defaults here — a hardcoded default would silently override
+    // WORLDMONITOR_BASE_URL/_TIMEOUT from the environment; loadConfig owns the
+    // flag → env → default precedence.
     .option(
       '--base-url <url>',
-      'World Monitor API base URL',
-      'https://worldmonitor.app',
+      'World Monitor API base URL (default: $WORLDMONITOR_BASE_URL or https://worldmonitor.app)',
     )
     .option('--api-key <key>', 'API key for authenticated access')
-    .option('--timeout <ms>', 'Request timeout in milliseconds', '30000')
+    .option(
+      '--timeout <ms>',
+      'Request timeout in ms (default: $WORLDMONITOR_TIMEOUT or 30000)',
+    )
     .option(
       '--format <format>',
       'Output format: json, json-pretty, raw',
@@ -149,7 +156,7 @@ function buildProgram(): Command {
         const config = loadConfig({
           baseUrl: globals.baseUrl,
           apiKey: globals.apiKey,
-          timeout: parseInt(globals.timeout, 10),
+          timeout: globals.timeout ? parseInt(globals.timeout, 10) : undefined,
         });
         const client = new WorldMonitorClient(config);
         const format = globals.format as OutputFormat;
@@ -177,24 +184,22 @@ function buildProgram(): Command {
           }
         }
 
-        // Check for known-broken endpoints
-        const brokenEndpoints: Record<string, string> = {
-          get_shipping_rates: 'Endpoint unavailable (404). Try get_commodity_quotes instead.',
-          get_chokepoint_status: 'Endpoint unavailable (404). Try list_navigational_warnings instead.',
-          get_gps_jamming: 'Endpoint returning invalid data. Try search_gdelt_documents with "GPS jamming".',
-        };
-        const brokenMsg = brokenEndpoints[capturedTool.name];
+        // Check for known-broken endpoints (single source of truth)
+        const brokenMsg = KNOWN_BROKEN[capturedTool.name];
         if (brokenMsg) {
           console.error(JSON.stringify({ error: true, message: brokenMsg }, null, 2));
           process.exit(1);
           return;
         }
 
-        // Check for direct handler first (external API calls)
+        // Check for direct handler first (external API calls). Composites get
+        // a context built from the FLAG-derived config so --base-url/--api-key/
+        // --timeout aren't silently ignored on the direct path.
         const handler = directHandlers[capturedTool.name];
         if (handler) {
+          const ctx = createContext(undefined, config);
           try {
-            const data = await handler(params);
+            const data = await handler(params, ctx);
             console.log(
               format === 'json'
                 ? JSON.stringify(data)
@@ -206,7 +211,19 @@ function buildProgram(): Command {
             console.error(
               JSON.stringify({ error: true, message }, null, 2),
             );
+            // process.exit preempts finally — close explicitly first.
+            try {
+              ctx.store.close();
+            } catch {
+              /* best-effort */
+            }
             process.exit(1);
+          } finally {
+            try {
+              ctx.store.close();
+            } catch {
+              /* double-close guarded; best-effort */
+            }
           }
           return;
         }
